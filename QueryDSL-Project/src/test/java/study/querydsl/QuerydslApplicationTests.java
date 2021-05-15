@@ -26,6 +26,9 @@ class QuerydslApplicationTests {
     @PersistenceContext
     EntityManager entityManager;
 
+    /**
+     *  참고: 스프링 부트에 아무런 설정도 하지 않으면 h2 DB를 메모리 모드로 JVM 안에서 실행한다
+     */
     @Test
     void contextLoads() {
         Hello hello = new Hello();
@@ -33,13 +36,14 @@ class QuerydslApplicationTests {
 
         JPAQueryFactory query = new JPAQueryFactory(entityManager);
         // QHello qHello = new QHello("h");
-        QHello qHello = QHello.hello;
+        QHello qHello = QHello.hello; // QueryDSL Q타입 동작 확인
         
         Hello result = query
                         .selectFrom(qHello)
                         .fetchOne();
 
         assertThat(result).isEqualTo(hello);
+        // lombok 동작 확인 hello.getId();
         assertThat(result.getId()).isEqualTo(hello.getId());
     }
 
