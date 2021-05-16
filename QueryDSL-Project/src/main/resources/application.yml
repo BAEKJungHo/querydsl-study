@@ -10,7 +10,8 @@ spring:
     properties:
       hibernate:
       # show_sql: true
-      format_sql: true
+        format_sql: true
+        use_sql_comments: true
 logging.level:
   org.hibernate.SQL: debug
   org.hibernate.type: trace # 로그에 찍힌 DB 물음표(?) 값을 볼 수 있다.
