@@ -1,9 +1,12 @@
 package study.querydsl;
 
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.QueryResults;
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.ExpressionUtils;
+import com.querydsl.core.types.Predicate;
 import com.querydsl.core.types.Projections;
+import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.CaseBuilder;
 import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.JPAExpressions;
@@ -11,8 +14,10 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.Commit;
 import org.springframework.transaction.annotation.Transactional;
 import study.querydsl.dto.MemberDto;
+import study.querydsl.dto.QMemberDto;
 import study.querydsl.dto.UserDto;
 import study.querydsl.entity.Member;
 import study.querydsl.entity.QMember;
@@ -24,6 +29,7 @@ import javax.persistence.PersistenceContext;
 import javax.persistence.PersistenceUnit;
 
 import java.util.List;
+import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static study.querydsl.entity.QMember.member;
@@ -514,5 +520,133 @@ class QuerydslBasicTest {
                 .fetch();
     }
 
+    @Test
+    void findDtoByQueryProjection() {
+        queryFactory
+                .select(new QMemberDto(member.username, member.age))
+                .from(member)
+                .fetch();
+    }
+
+    @Test
+    void dynamicQuery_BooleanBuilder() {
+        String usernameParam = "member1";
+        Integer ageParam = 10;
+
+        List<Member> result = searchMember1(usernameParam, ageParam);
+        assertThat(result.size()).isEqualTo(1);
+    }
+
+    private List<Member> searchMember1(String usernameCond, Integer ageCond) {
+        BooleanBuilder builder = new BooleanBuilder();
+
+        if(Objects.nonNull(usernameCond)) {
+            builder.and(member.username.eq(usernameCond));
+        }
+
+        if(Objects.nonNull(ageCond)) {
+            builder.and(member.age.eq(ageCond));
+        }
+
+        return queryFactory
+                    .selectFrom(member)
+                    .where(builder)
+                    .fetch();
+    }
+
+    @Test
+    void dynamicQuery_WhereParam() {
+        String usernameParam = "member1";
+        Integer ageParam = 10;
+
+        List<Member> result = searchMember2(usernameParam, ageParam);
+        assertThat(result.size()).isEqualTo(1);
+    }
+
+    private List<Member> searchMember2(String usernameCond, Integer ageCond) {
+        return queryFactory
+                .selectFrom(member)
+                .where(usernameEq(usernameCond), ageEq(ageCond))
+                .fetch();
+    }
+
+//    private Predicate usernameEq(String usernameCond) {
+//        return Objects.isNull(usernameCond) ? null : member.username.eq(usernameCond);
+//    }
+//
+//    private Predicate ageEq(Integer ageCond) {
+//        return Objects.isNull(ageCond) ? null : member.age.eq(ageCond);
+//    }
+
+    private BooleanExpression usernameEq(String usernameCond) {
+        return usernameCond != null ? member.username.eq(usernameCond) : null;
+    }
+
+    private BooleanExpression ageEq(Integer ageCond) {
+        return ageCond != null ? member.age.eq(ageCond) : null;
+    }
+
+    private BooleanExpression allEq(String usernameCond, Integer ageCond) {
+        return usernameEq(usernameCond).and(ageEq(ageCond));
+    }
+
+    @Test
+    @Commit
+    void bulkUpdate() {
+        long count = queryFactory
+                .update(member)
+                .set(member.username, "비회원")
+                .where(member.age.lt(28))
+                .execute();
+
+        // 벌크 연산 후에는 꼭 영속성 컨텍스트를 초기화 해야 한다.
+        em.flush();
+        em.clear();
+
+        /**
+         * 벌크 연산을 하고 나면 member1~4 까지가 영속성 컨텍스트에 존재하게 된다.
+         * 영속성 컨텍스트에 존재한 채로 조회 쿼리를 날리면 DB 에서 값을 가져오고 영속성 컨텍스트에 값이 있는지 확인한다.
+         * 값이 있다면 영속성 컨텍스트의 값을 우선으로 사용하기 때문에, 항상 영속성 컨텍스트를 비워줘야 한다.
+         */
+        List<Member> result = queryFactory
+                .selectFrom(member)
+                .fetch();
+    }
+
+    @Test
+    void bulkAdd() {
+        long count = queryFactory
+                .update(member)
+                .set(member.age, member.age.add(1)) // 곱하기는 multiply
+                .execute();
+    }
+
+    @Test
+    void bulkDelete() {
+        long count = queryFactory
+                .delete(member)
+                .where(member.age.gt(18))
+                .execute();
+    }
+
+    @Test
+    void sqlFunction() {
+        String result = queryFactory
+                .select(Expressions.stringTemplate("function('replace', {0}, {1}, {2})", member.username, "member", "M"))
+                .from(member)
+                .fetchFirst();
+    }
+
+    @Test
+    void sqlFunction2() {
+        queryFactory
+                .select(member.username)
+                .from(member)
+                .where(member.username.eq(Expressions.stringTemplate("function('lower', {0})", member.username)))
+                .fetch();
+
+        // lower 같은 ansi 표준 함수들은 querydsl 이 상당부분 내장하고 있다. 따라서 다음과 같이 처리해도 결과는 같다.
+        // .where(member.username.eq(member.username.lower()))
+    }
 
 }
